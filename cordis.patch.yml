@@ -1,0 +1,6 @@
+# Bundle patch: insert this plugin into the profile's loader tree.
+# The package name must match the published/installed specifier, because the
+# loader imports exactly this string.
+- insert:
+    - id: avatar-top
+      name: "dsh-avatar-top"
