@@ -24,6 +24,10 @@ This plugin moves **only the account row**:
 - Three heights: **full 44px**, **compact 32px**, **avatar only 28px** (hides the account name and
   shrinks the avatar to 20px).
 - Spacing 0–24px, and an on/off switch that restores the stock layout without uninstalling.
+- The desktop update pill (download progress / "ready") shares that flex row. While it is visible the
+  **inline** placement temporarily returns to a normal 28px row under the brand row: an absolutely
+  positioned row has no width to give the pill, so it would otherwise be drawn underneath the
+  avatar. The avatar goes back to the corner as soon as the pill disappears.
 
 Changes apply immediately — the browser half subscribes to the settings document and rewrites the
 stylesheet. Settings persist in the profile's `cordis.patch.yml`.
@@ -100,7 +104,15 @@ html:not([data-platform='darwin']) [class*='_root']:not([class*='_collapsed']) >
 - macOS keeps its traffic-light strip layout (`:not([data-platform='darwin'])`).
 - Collapsed rails are left untouched (on Windows the footer is `display:none` there anyway).
 - `inlineBrand` lifts the button out of the flow (`top: 8px; right: 12px; z-index: 3`) and forces
-  the avatar-only shape. On non-Windows shells it falls back to `top`.
+  the avatar-only shape. On non-Windows shells it falls back to `top`. While the update pill exists
+  (`:has([class*='_indicator'])`) the row returns to `position: static; order: -3`, i.e. a normal
+  28px row under the brand row.
+- The button selector is
+  `[class*='_trigger']:not([class*='_triggerRow']):not([class*='_triggerLabel'])`. A bare
+  `[class*='_trigger']` also matches `_triggerRow` — the flex row holding the account button, the
+  connection indicator and the update pill — which collapsed the row to 28px and drew the pill
+  underneath the avatar (0.3.0 bug). The row itself only gets `flex-wrap: wrap`, so a pill that
+  cannot fit wraps instead of being pushed out of the sidebar.
 
 ### Settings plumbing
 

@@ -26,7 +26,9 @@
 改动**即时生效**（浏览器半侧订阅设置并重写 `<style>`），不需要重启、不需要保存按钮。
 设置在 profile 的 `cordis.patch.yml` 里持久化，跨会话保留。
 
-> 0.2 的「紧凑头像行」开关已被「占用高度」三选替代；旧的 `compact` 值会被忽略（按默认完整 44 显示）。
+> 0.3.1：桌面端「下载/更新」按钮（`_indicator`）和账号按钮共用一行。它一出现，
+> **内嵌品牌行会临时退回「品牌行下」的 28px 常规行**——绝对定位的那一行没有宽度分给它，
+> 否则按钮会被画到头像底下。更新结束后它自己回到角落，状态不用改。
 
 ## 实现方式
 
@@ -75,10 +77,16 @@ html:not([data-platform='darwin']) [class*='_root']:not([class*='_collapsed']) >
 - 另两个位置同样只给 `_settingsArea` 排名：`logoRow -4 / settingsArea -3 / newSession -2 / panelList -1`
   （`beforePanels` 则把 `newSession` 与 `settingsArea` 的顺序对调）。
 - 「占用高度」只改账号按钮自身：`compact` → `height: 32px`；`icon` → `height: 28px`、
-  `_label { display: none }`、`_avatar` 缩到 20px。
+  `_label { display: none }`、`_avatar` 缩到 20px。选择器是
+  `[class*='_trigger']:not([class*='_triggerRow']):not([class*='_triggerLabel'])`——裸的
+  `[class*='_trigger']` 会顺带命中 `_triggerRow`（账号按钮、连接指示器、桌面更新胶囊共用的那一行），
+  把行宽压成 28px、更新胶囊被画到头像底下（0.3.0 的实际故障）。
+- `_triggerRow` 只加 `flex-wrap: wrap`，行放不下时更新胶囊换行，而不是被挤出侧栏。
 - 「内嵌品牌行」把账号按钮从列流里摘出去：`position: absolute; top: 8px; right: 12px`，以
   `_root` 为定位上下文（Windows 桌面展开态，折叠开关在原生标题栏里，品牌行右端是空的）。
   按钮固定 28px、只留头像；非 Windows 壳自动退回「最顶部」，不会把按钮叠到别处。
+  一旦 `:has([class*='_indicator'])` 命中（桌面正在下载/待更新），这一行退回
+  `position: static; order: -3`，重新排在品牌行下面 28px；胶囊消失后自动回到角落。
 - 选择器用 ui-sidebar 的 CSS Modules **类名后缀**（`_root` / `_footArea` / `_settingsArea` /
   `_label` / `_avatar` / `_trigger` / `_logoRow` / `_newSession` / `_panelList`），不是每次构建
   都变的哈希前缀。

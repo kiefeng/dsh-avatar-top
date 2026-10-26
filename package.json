@@ -1,6 +1,6 @@
 {
   "name": "dsh-avatar-top",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Move the sidebar account avatar (settings launcher) out of the bottom strip, with a Plugins-page settings card: placement (including a zero-height inline mode), row height, spacing, and an on/off switch.",
   "license": "MIT",
   "author": "kiefeng",

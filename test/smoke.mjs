@@ -85,11 +85,24 @@ assert.deepEqual(
 const full = cssFor({ position: 'top', density: 'full' })
 assert.ok(!full.includes("[class*='_trigger'] {"), 'full keeps the stock row height')
 const compact = cssFor({ position: 'top', density: 'compact' })
-assert.ok(compact.includes("[class*='_trigger'] { height: 32px;"), 'compact trims the row to 32px')
+// The account button selector must not swallow `_triggerRow`: that row also holds
+// the connection indicator and the desktop update pill, and sizing it collapsed
+// the row and drew the pill underneath the avatar.
+const BUTTON = "[class*='_trigger']:not([class*='_triggerRow']):not([class*='_triggerLabel'])"
+assert.ok(compact.includes(`${BUTTON} { height: 32px;`), 'compact trims the account button to 32px')
 const icon = cssFor({ position: 'top', density: 'icon' })
-assert.ok(icon.includes("[class*='_trigger'] { height: 28px;"), 'icon trims the row to 28px')
+assert.ok(icon.includes(`${BUTTON} { height: 28px;`), 'icon trims the account button to 28px')
 assert.ok(icon.includes("[class*='_label'] { display: none; }"), 'icon hides the account name')
 assert.ok(icon.includes("[class*='_avatar'] { width: 20px; height: 20px; }"), 'icon shrinks the avatar')
+assert.ok(!icon.includes("[class*='_trigger'] { height"), 'no rule sizes anything merely matching `_trigger`')
+
+// The desktop update pill lives in the same flex row; the row must wrap, not clip.
+for (const position of POSITIONS) {
+  assert.ok(
+    cssFor({ position }).includes("[class*='_triggerRow'] { flex-wrap: wrap; row-gap: 4px; }"),
+    `the account row wraps instead of clipping the update pill (${position})`,
+  )
+}
 
 // Inline brand row: zero-height placement, avatar only, top falls back elsewhere.
 const inline = cssFor({ position: 'inlineBrand', gap: 5 })
@@ -101,6 +114,16 @@ assert.ok(
 )
 assert.ok(inline.includes("[class*='_label'] { display: none; }"), 'inline hides the account name')
 assert.ok(inline.includes('order: -1; margin-bottom: 5px;'), 'non-Windows shells fall back to top')
+
+// While the update pill exists, the inline shape has no width to share, so the row
+// drops back into the flow under the brand row and both stay readable.
+assert.ok(inline.includes(":has([class*='_indicator'])"), 'inline reacts to the desktop update pill')
+assert.ok(
+  inline.includes('{ position: static; top: auto; right: auto; width: auto; z-index: auto; order: -3; margin: 0 0 5px; }'),
+  'the update pill forces the account row back under the brand row',
+)
+assert.ok(inline.includes(":has([class*='_indicator']) > [class*='_logoRow'] { order: -4; }"), 'the brand row stays first')
+assert.ok(inline.includes(":has([class*='_indicator']) > [class*='_panelList'] { order: -1; }"), 'panel rows stay after it')
 
 for (const position of POSITIONS) {
   assert.ok(cssFor({ position }).includes("html:not([data-platform='darwin'])"), `macOS stays untouched (${position})`)
