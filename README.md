@@ -6,6 +6,8 @@ Moves the left sidebar's account avatar (which is also the Settings launcher) ou
 strip, so the session list gains the space back. Placement, height and spacing are adjustable from
 a card on the **Plugins** page; **inline brand row** costs zero vertical space.
 
+![Before and after: the account row leaves the bottom strip for the brand row](docs/layout.png)
+
 > Tested against DeepSeek Harness `0.2.2-rc.1` (desktop, Windows). The macOS desktop is left
 > untouched by design; the browser shell works on every platform.
 
