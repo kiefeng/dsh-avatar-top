@@ -6,7 +6,19 @@ Moves the left sidebar's account avatar (which is also the Settings launcher) ou
 strip, so the session list gains the space back. Placement, height and spacing are adjustable from
 a card on the **Plugins** page; **inline brand row** costs zero vertical space.
 
-> Tested against DeepSeek Harness `0.2.1-rc.2` (desktop, Windows).
+> Tested against DeepSeek Harness `0.2.2-rc.1` (desktop, Windows). The macOS desktop is left
+> untouched by design; the browser shell works on every platform.
+
+## 0.3.2
+
+Two fixes that only show up on a real desktop:
+
+- The Windows titlebar strip is a `-webkit-app-region: drag` band (DSH paints it with
+  `[data-windows-titlebar] .frame:before`). The inline avatar used to sit inside it, so a click
+  started a window drag. The container and the button now opt out with `no-drag`.
+- The desktop shell snapshots the injection table at Host start, so the boot `<style>` row could
+  not be removed when the plugin was switched off — the switch looked dead. Every selector is now
+  gated on `:not([data-avatar-top-off])`, an attribute the browser half toggles on `<html>`.
 
 ## What it does
 
@@ -30,7 +42,9 @@ This plugin moves **only the account row**:
   avatar. The avatar goes back to the corner as soon as the pill disappears.
 
 Changes apply immediately — the browser half subscribes to the settings document and rewrites the
-stylesheet. Settings persist in the profile's `cordis.patch.yml`.
+stylesheet. Switching the plugin off is immediate too: the boot row a desktop session baked in at
+Host start is gated on `data-avatar-top-off`, so it goes inert without a restart. Settings persist
+in the profile's `cordis.patch.yml`.
 
 ## Settings
 
@@ -44,14 +58,16 @@ stylesheet. Settings persist in the profile's `cordis.patch.yml`.
 
 ## Install
 
+Not on npm yet — install from GitHub:
+
 ```sh
-dsh plugin add dsh-avatar-top
+dsh plugin add git+https://github.com/kiefeng/dsh-avatar-top
 ```
 
 Restart DSH once after installing (the client bundle and package metadata are read at host start).
 Then open **Plugins → dsh-avatar-top** to configure it.
 
-Git install works too, e.g. `dsh plugin add git+https://github.com/<owner>/dsh-avatar-top`.
+The npm name `dsh-avatar-top` is reserved; once published, `dsh plugin add dsh-avatar-top` works too.
 
 Self-check: the plugin serves its current stylesheet at `/dsh-avatar-top.css` (public, read-only),
 so a wrong layout can be diagnosed without a session:
@@ -90,9 +106,11 @@ prevents a flash on first paint.
 The sidebar is a flex column; placement is pure `order`, and selectors key off the stable
 CSS-module class-name suffixes (`_root`, `_footArea`, `_settingsArea`, `_trigger`, `_label`,
 `_avatar`, `_logoRow`, `_newSession`, `_panelList`) rather than the per-build hash prefix.
+`_trigger` / `_label` / `_avatar` come from the settings-account module (`AccountMenu`); the rest
+from ui-sidebar.
 
 ```css
-html:not([data-platform='darwin']) [class*='_root']:not([class*='_collapsed']) > [class*='_footArea'] {
+html:not([data-platform='darwin']):not([data-avatar-top-off]) [class*='_root']:not([class*='_collapsed']) > [class*='_footArea'] {
   display: contents;
 }
 … > [class*='_footArea'] > [class*='_settingsArea'] {
@@ -104,9 +122,10 @@ html:not([data-platform='darwin']) [class*='_root']:not([class*='_collapsed']) >
 - macOS keeps its traffic-light strip layout (`:not([data-platform='darwin'])`).
 - Collapsed rails are left untouched (on Windows the footer is `display:none` there anyway).
 - `inlineBrand` lifts the button out of the flow (`top: 8px; right: 12px; z-index: 3`) and forces
-  the avatar-only shape. On non-Windows shells it falls back to `top`. While the update pill exists
-  (`:has([class*='_indicator'])`) the row returns to `position: static; order: -3`, i.e. a normal
-  28px row under the brand row.
+  the avatar-only shape. On non-Windows shells it falls back to `top`. The band it lands in is the
+  `titleBarOverlay` drag strip, so both the row and the button carry `-webkit-app-region: no-drag`.
+  While the update pill exists (`:has([class*='_indicator'])`) the row returns to
+  `position: static; order: -3`, i.e. a normal 28px row under the brand row.
 - The button selector is
   `[class*='_trigger']:not([class*='_triggerRow']):not([class*='_triggerLabel'])`. A bare
   `[class*='_trigger']` also matches `_triggerRow` — the flex row holding the account button, the
@@ -130,12 +149,14 @@ the package name.
   positioning or moves it out of the column, the rules become no-ops (no errors, no misplacement).
 - `inlineBrand` needs the Windows titlebar (`html[data-windows-titlebar]`), where the collapse
   toggle lives in the native titlebar. Elsewhere it falls back to the top placement.
+- The macOS desktop is skipped on purpose (traffic lights + drag area). In a browser on macOS the
+  rules do apply, because `<html>` carries no `data-platform` there — the two shells differ.
 - The diagnostics route is public and read-only; it returns this plugin's CSS text only.
 
 ## Development
 
 ```powershell
-npm install      # @deepseek-ai/schemastery, for the tests' host-side import
+npm install      # @deepseek-ai/schemastery is a real dependency (the Host half imports it)
 node --check lib/index.js
 node --check lib/client.js
 npm test

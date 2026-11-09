@@ -4,6 +4,7 @@ import {
   DEFAULTS,
   DENSITIES,
   MAX_GAP,
+  OFF_ATTRIBUTE,
   POSITIONS,
   apply,
   contributeStyleRow,
@@ -109,8 +110,14 @@ const inline = cssFor({ position: 'inlineBrand', gap: 5 })
 assert.ok(inline.includes('[data-windows-titlebar]'), 'inline needs the Windows titlebar')
 assert.ok(inline.includes('{ position: relative; }'), 'the column becomes the positioning context')
 assert.ok(
-  inline.includes('{ position: absolute; top: 8px; right: 12px; width: auto; z-index: 3; }'),
-  'the account row is lifted into the brand row',
+  inline.includes('{ position: absolute; top: 8px; right: 12px; width: auto; z-index: 3; -webkit-app-region: no-drag; }'),
+  'the account row is lifted into the brand row and opts out of the window-drag strip',
+)
+// The titlebar strip is a `-webkit-app-region: drag` pseudo-element on Windows;
+// a control inside it without `no-drag` turns a click into a window drag.
+assert.ok(
+  inline.includes('justify-content: center; -webkit-app-region: no-drag; }'),
+  'the account button itself opts out of the window-drag strip',
 )
 assert.ok(inline.includes("[class*='_label'] { display: none; }"), 'inline hides the account name')
 assert.ok(inline.includes('order: -1; margin-bottom: 5px;'), 'non-Windows shells fall back to top')
@@ -128,6 +135,18 @@ assert.ok(inline.includes(":has([class*='_indicator']) > [class*='_panelList'] {
 for (const position of POSITIONS) {
   assert.ok(cssFor({ position }).includes("html:not([data-platform='darwin'])"), `macOS stays untouched (${position})`)
 }
+
+// The on/off switch has to switch off a stylesheet the desktop shell already
+// baked into its boot snapshot: that <style> row cannot be removed at runtime,
+// so every selector is gated on `data-avatar-top-off`, which the browser half
+// toggles on <html>.
+for (const position of POSITIONS) {
+  assert.ok(
+    cssFor({ position }).includes(`:not([${OFF_ATTRIBUTE}])`),
+    `every rule is gated on the off switch (${position})`,
+  )
+}
+assert.equal(cssFor({ enabled: false }), '', 'switched off emits no live rules')
 
 // ── 4. injection table ────────────────────────────────────────────────────
 const table = []
