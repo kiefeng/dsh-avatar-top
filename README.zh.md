@@ -8,7 +8,7 @@
 
 ![改前改后：账号行从底部腾给品牌行](docs/layout.png)
 
-> 实测版本：DSH 桌面 0.2.2-rc.1 / Windows（macOS 桌面按设计不动；浏览器形态也可用）。
+> 实测版本：DSH 桌面 0.2.2-rc.2 / Windows（macOS 桌面按设计不动；浏览器形态也可用）。
 
 ## 设置项（插件页 → dsh-avatar-top → 内嵌表单）
 
@@ -39,6 +39,13 @@
 > 内嵌的头像以前落在里面，点击会被当成拖窗口，现在容器和按钮都加了 `no-drag`。
 > ② 桌面端把注入表当启动快照，关掉「启用」时旧的 `<style>` 删不掉，开关看起来失灵；
 > 现在所有选择器都挂 `:not([data-avatar-top-off])` 门控，浏览器半侧一关属性，整张表立即失效。
+
+> 0.3.3：跟进 DSH 0.2.2 的侧栏改版。面板列表和工作区列表被收进一个滚动容器的 CSS grid，
+> 原先给面板列表排的 `order` 成了空规则（grid 项按 `grid-area` 定位），已删掉。
+> 那个滚动容器自带留白（`margin-top: 4px` 加首行 8px 网格），选「新会话下」时账号行正好落在它上面，
+> 间距会比设置的 `gap` 多 12px。现在让容器交出那 4px、再从 `gap` 里扣掉 8px 首行：
+> `gap` ≥ 8 时就是实际距离，更小的值被首行的呼吸区托在 8px。
+> 设置卡里还加了一张侧栏小图，切位置时能直接看到账号行落在哪一行。
 
 ## 实现方式
 
@@ -88,8 +95,17 @@ html:not([data-platform='darwin']):not([data-avatar-top-off]) [class*='_root']:n
 }
 ```
 
-- 另两个位置同样只给 `_settingsArea` 排名：`logoRow -4 / settingsArea -3 / newSession -2 / panelList -1`
-  （`beforePanels` 则把 `newSession` 与 `settingsArea` 的顺序对调）。
+- 另两个位置同样只给 `_settingsArea` 排名：`logoRow -4 / settingsArea -3 / newSession -2`
+  （`beforePanels` 则把 `newSession` 与 `settingsArea` 的顺序对调）。面板列表不参与排名：0.2.2 起
+  它在滚动容器里按 `grid-area` 定位，`order` 对它无效；0.2.1 上它默认就是 `order: 0`，
+  本来就排在所有负数队列之后，那条规则一直是多余的。
+- 「新会话下」要抵掉滚动容器自带的留白：`_scrollRegion { margin-top: 4px }` 加
+  `_scrollArea` 首行 8px 网格，账号行正好坐在它上面，距离比设置值多 12px。补偿分两条：
+  给容器 `margin-top: 0`（这段由账号行自己的 gap 接管），再把首行 8px 从 gap 里扣掉——
+  `margin-bottom: max(0px, calc(gap - 8))`，`max` 保证面板列表不会贴到账号行身上。
+  `:has(> [class*='_scrollRegion'])` 既做新结构探测（老版本没有这个容器，规则不生效），
+  也替代了列表前缀。注意 `settings` 变量本身已带 `EXPANDED` 前缀，拼选择器时不能再用它接一次，
+  否则会变成两个 `_root` 串联、永远不匹配（这条踩过一次，测试里加了单次出现的断言）。
 - 「占用高度」只改账号按钮自身：`compact` → `height: 32px`；`icon` → `height: 28px`、
   `_label { display: none }`、`_avatar` 缩到 20px。`_label` / `_avatar` / `_trigger` 是
   settings-account 那半的模块后缀（`AccountMenu` 渲染的按钮、名字、头像圈），不是 ui-sidebar 的。
@@ -107,7 +123,7 @@ html:not([data-platform='darwin']):not([data-avatar-top-off]) [class*='_root']:n
   一旦 `:has([class*='_indicator'])` 命中（桌面正在下载/待更新），这一行退回
   `position: static; order: -3`，重新排在品牌行下面 28px；胶囊消失后自动回到角落。
 - 选择器用 CSS Modules **类名后缀**（`_root` / `_footArea` / `_settingsArea` /
-  `_label` / `_avatar` / `_trigger` / `_logoRow` / `_newSession` / `_panelList`），不是每次构建
+  `_label` / `_avatar` / `_trigger` / `_logoRow` / `_newSession` / `_scrollRegion`），不是每次构建
   都变的哈希前缀。
 - 收起态（`_collapsed`）不参与重排：Windows 桌面收起时 footer 本来就 `display:none`，其他平台的
   收起轨道保持 DSH 原样。
@@ -165,8 +181,10 @@ npm test
 
 测试覆盖：schema 默认值与越界拒绝、volatile ref / 普通值两种输入、四种位置 × 三档高度 × 间距的
 CSS 矩阵、注入行去重、诊断端点、**`_footerActions` 不被重排的回归断言**（防 cost-meter 之类的
-侧栏小组件被一起搬走）、**每条规则都带关闭门控**、**内嵌按钮带 `no-drag`**，以及**两半 CSS
-生成器在 120 组组合上逐字节一致**（防止浏览器半侧与 Host 半侧漂移）。
+侧栏小组件被一起搬走）、**每条规则都带关闭门控**、**内嵌按钮带 `no-drag`**、**补偿选择器里
+`_root` 只出现一次**（重复会让规则静默失效），以及**两半 CSS 生成器在 120 组组合上逐字节一致**
+（防止浏览器半侧与 Host 半侧漂移）。设置卡另有渲染断言：预览图跟着位置变、内嵌模式不画独立账号
+行、macOS 出提示、内嵌模式出说明。
 
 ## 已知限制
 
@@ -179,4 +197,6 @@ CSS 矩阵、注入行去重、诊断端点、**`_footerActions` 不被重排的
   但在 macOS 的浏览器里用 `dsh web` 时没有这个属性，规则会生效——两种壳行为不一致，按「Windows
   桌面 + 浏览器」理解即可。
 - 「内嵌品牌行」只在 Windows 桌面成立（需要 `data-windows-titlebar`）；Web 形态自动退回「最顶部」。
+- 「新会话下」的补偿按 0.2.2-rc.2 的数值写死（容器 4px margin 归零、首行 8px 从 gap 里扣）。
+  上游若改这两个值，这档间距会跟着偏；补偿规则本身在诊断端点里能直接看到。
 - 诊断端点 `/dsh-avatar-top.css` 是公开只读路由，只回本插件的 CSS 文本，不含用户数据。

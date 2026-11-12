@@ -70,16 +70,49 @@ const orderOf = (sheet, suffix) => {
   return match === null ? undefined : Number(match[1])
 }
 assert.deepEqual(
-  ['_logoRow', '_settingsArea', '_newSession', '_panelList'].map((suffix) => orderOf(afterBrand, suffix)),
-  [-4, -3, -2, -1],
+  ['_logoRow', '_settingsArea', '_newSession'].map((suffix) => orderOf(afterBrand, suffix)),
+  [-4, -3, -2],
   'afterBrand places the account row directly under the brand row',
 )
+// 0.2.2-rc.2 moved the panel rows into a scrolling grid with explicit
+// `grid-area`s, so `order` on the list is dead there; it was already redundant
+// on 0.2.1, where the default `order: 0` put the list after every negative one.
+assert.ok(!afterBrand.includes('_panelList'), 'the panel list is never reordered')
 
 const beforePanels = cssFor({ position: 'beforePanels', gap: 6 })
 assert.deepEqual(
-  ['_logoRow', '_newSession', '_settingsArea', '_panelList'].map((suffix) => orderOf(beforePanels, suffix)),
-  [-4, -3, -2, -1],
+  ['_logoRow', '_newSession', '_settingsArea'].map((suffix) => orderOf(beforePanels, suffix)),
+  [-4, -3, -2],
   'beforePanels places the account row above the panel entries',
+)
+assert.ok(!beforePanels.includes('_panelList'), 'the panel list is never reordered')
+// The scroll container keeps an 8px lead row of its own headroom, and in this
+// placement it lands exactly between the account row and the panel list. The
+// gap is shaved by that much so the setting still means what it says; `max()`
+// floors it at the lead row. The container's 4px top margin gives way entirely.
+assert.ok(
+  beforePanels.includes(":has(> [class*='_scrollRegion'])"),
+  'the compensation only applies where the scroll container exists',
+)
+assert.ok(
+  beforePanels.includes(":has(> [class*='_scrollRegion']) > [class*='_scrollRegion'] { margin-top: 0; }"),
+  "the container's own top margin gives way to the row's gap",
+)
+assert.ok(
+  beforePanels.includes('margin-bottom: max(0px, calc(6px - 8px));'),
+  'the scroll container lead row is taken back out of the gap',
+)
+assert.ok(
+  !afterBrand.includes('_scrollRegion'),
+  'the other placements do not sit directly above the scroll container',
+)
+// The `:has` prefix has to replace the column selector, not stack onto it: two
+// copies in one selector never match, and the rule would silently do nothing.
+const headroomLine = beforePanels.split('\n').find((line) => line.includes('_scrollRegion'))
+assert.equal(
+  headroomLine.split("html:not([data-platform='darwin'])").length - 1,
+  1,
+  'the compensation selector names the column exactly once',
 )
 
 // Density: full leaves the row alone, compact trims it, icon drops the name.
@@ -130,7 +163,6 @@ assert.ok(
   'the update pill forces the account row back under the brand row',
 )
 assert.ok(inline.includes(":has([class*='_indicator']) > [class*='_logoRow'] { order: -4; }"), 'the brand row stays first')
-assert.ok(inline.includes(":has([class*='_indicator']) > [class*='_panelList'] { order: -1; }"), 'panel rows stay after it')
 
 for (const position of POSITIONS) {
   assert.ok(cssFor({ position }).includes("html:not([data-platform='darwin'])"), `macOS stays untouched (${position})`)
@@ -217,12 +249,12 @@ assert.equal(loaded[0].id, 'dsh-avatar-top', 'module id is the package name')
 
 const stubs = {
   react: {
-    useSyncExternalStore: () => {},
+    useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
     createElement: () => ({}),
   },
   'react/jsx-runtime': {
-    jsx: () => ({}),
-    jsxs: () => ({}),
+    jsx: (type, props) => ({ type, props }),
+    jsxs: (type, props) => ({ type, props }),
     Fragment: {},
   },
   '@deepseek-ai/dsh-client-ui-primitives': {},
@@ -248,4 +280,62 @@ for (const options of matrix) {
 }
 
 delete globalThis.window
-console.log(`ok: settings schema, ${matrix.length}-case stylesheet matrix, injection row, diagnostics route, client parity`)
+
+// ── 7. settings card ──────────────────────────────────────────────────────
+// The card is built from plain jsx-runtime calls, so the stubs above hand back
+// real trees and the tests can inspect what the user would see.
+const walk = (node, hits = []) => {
+  if (node === null || typeof node !== 'object') return hits
+  if (Array.isArray(node)) {
+    for (const child of node) walk(child, hits)
+    return hits
+  }
+  hits.push(node)
+  if (node.props && node.props.children !== undefined) walk(node.props.children, hits)
+  return hits
+}
+const cardConfig = (value) => ({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ value, writable: true }),
+})
+const t = (key) => key
+const hasChildText = (tree, text) => walk(tree).some((node) => node.props && node.props.children === text)
+const isAccountRow = (node) => node.props && node.props.style && node.props.style.height === '18px'
+
+const card = client.SettingsCard({ t, view: 'full', config: cardConfig({ position: 'beforePanels' }) })
+const cardHits = walk(card)
+assert.ok(
+  cardHits.some((node) => node.type === client.SidebarPreview),
+  'the card shows a sidebar preview',
+)
+assert.ok(
+  walk(client.SidebarPreview({ position: 'top' })).some((node) => node.props && node.props.style && node.props.style.width === '168px'),
+  'the preview is drawn at its fixed miniature width',
+)
+assert.equal(client.SettingsCard({ t, view: 'summary', config: cardConfig({}) }), 'summary', 'the summary view stays one line')
+assert.ok(!hasChildText(card, 'darwinNotice'), 'other platforms get no macOS notice')
+
+// The preview keeps exactly one account row, and puts it where the placement says.
+for (const position of ['top', 'afterBrand', 'beforePanels']) {
+  const rows = walk(client.SidebarPreview({ position }))
+  assert.equal(rows.filter(isAccountRow).length, 1, `exactly one account row is previewed (${position})`)
+}
+const inlinePreview = walk(client.SidebarPreview({ position: 'inlineBrand' }))
+assert.equal(inlinePreview.filter(isAccountRow).length, 0, 'the inline placement draws no separate account row')
+assert.ok(
+  inlinePreview.some((node) => node.props && node.props.style && node.props.style.marginLeft === 'auto'),
+  'the inline placement nests the avatar in the brand row',
+)
+
+// macOS ignores the plugin; say so instead of leaving the switches looking live.
+globalThis.document = { documentElement: { dataset: { platform: 'darwin' } } }
+assert.ok(
+  hasChildText(client.SettingsCard({ t, view: 'full', config: cardConfig({}) }), 'darwinNotice'),
+  'macOS gets told the plugin will not change anything',
+)
+// Inline mode fixes height and spacing; the controls are off and the reason is shown.
+const inlineCard = client.SettingsCard({ t, view: 'full', config: cardConfig({ position: 'inlineBrand' }) })
+assert.ok(hasChildText(inlineCard, 'inlineNote'), 'inline mode explains why height and spacing are inert')
+delete globalThis.document
+
+console.log(`ok: settings schema, ${matrix.length}-case stylesheet matrix, injection row, diagnostics route, client parity, settings card`)

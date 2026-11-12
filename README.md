@@ -8,8 +8,18 @@ a card on the **Plugins** page; **inline brand row** costs zero vertical space.
 
 ![Before and after: the account row leaves the bottom strip for the brand row](docs/layout.png)
 
-> Tested against DeepSeek Harness `0.2.2-rc.1` (desktop, Windows). The macOS desktop is left
+> Tested against DeepSeek Harness `0.2.2-rc.2` (desktop, Windows). The macOS desktop is left
 > untouched by design; the browser shell works on every platform.
+
+## 0.3.3
+
+Follows DSH 0.2.2's sidebar rework. The panel list and the workspace/session list now live inside
+one scrolling CSS grid, so the `order` the plugin used to set on the panel list became a no-op
+(grid items are placed by `grid-area`) and is gone. That container carries headroom of its own
+(`margin-top: 4px` plus an 8px lead row), and with **below New Session** the account row lands right
+on top of it, so the spacing came out 12px wider than the configured gap. The container now gives up
+its margin and the lead row comes out of the gap, so from 8px up the gap is the real distance. The
+settings card also gained a miniature of the sidebar that follows the placement.
 
 ## 0.3.2
 
@@ -57,6 +67,9 @@ in the profile's `cordis.patch.yml`.
 | Height | full 44 / compact 32 / avatar only 28 | full 44 |
 | Spacing below | 0–24 px | 4 |
 | Restore defaults | button | — |
+
+The card draws a miniature of the sidebar and moves the highlighted account row as you change the
+placement — no need to look back at the real sidebar to check.
 
 ## Install
 
@@ -107,7 +120,7 @@ prevents a flash on first paint.
 
 The sidebar is a flex column; placement is pure `order`, and selectors key off the stable
 CSS-module class-name suffixes (`_root`, `_footArea`, `_settingsArea`, `_trigger`, `_label`,
-`_avatar`, `_logoRow`, `_newSession`, `_panelList`) rather than the per-build hash prefix.
+`_avatar`, `_logoRow`, `_newSession`, `_scrollRegion`) rather than the per-build hash prefix.
 `_trigger` / `_label` / `_avatar` come from the settings-account module (`AccountMenu`); the rest
 from ui-sidebar.
 
@@ -123,6 +136,14 @@ html:not([data-platform='darwin']):not([data-avatar-top-off]) [class*='_root']:n
 
 - macOS keeps its traffic-light strip layout (`:not([data-platform='darwin'])`).
 - Collapsed rails are left untouched (on Windows the footer is `display:none` there anyway).
+- **Below New Session** sits directly above the scrolling container, which brings headroom of its
+  own (`_scrollRegion` margin-top 4px + an 8px lead row). Two rules take it back: the container gets
+  `margin-top: 0` (the row's own gap replaces it) and the lead row comes out of the gap —
+  `margin-bottom: max(0px, calc(gap - 8px))`, with `max` keeping the list from riding up onto the
+  row above. The `:has` doubles as a new-structure probe (older DSH has no such container, so the
+  rules do not apply) — and it *replaces* the column prefix rather than stacking onto it, because
+  `settings` already starts with the same prefix; two concatenated `_root` selectors never match,
+  which is how the first draft failed silently.
 - `inlineBrand` lifts the button out of the flow (`top: 8px; right: 12px; z-index: 3`) and forces
   the avatar-only shape. On non-Windows shells it falls back to `top`. The band it lands in is the
   `titleBarOverlay` drag strip, so both the row and the button carry `-webkit-app-region: no-drag`.
@@ -153,6 +174,9 @@ the package name.
   toggle lives in the native titlebar. Elsewhere it falls back to the top placement.
 - The macOS desktop is skipped on purpose (traffic lights + drag area). In a browser on macOS the
   rules do apply, because `<html>` carries no `data-platform` there — the two shells differ.
+- The compensation for **below New Session** is pinned to 0.2.2-rc.2's numbers (the container's 4px
+  margin is zeroed and the 8px lead row comes out of the gap). If upstream changes either, that one
+  placement drifts; the rules are visible in the diagnostics route.
 - The diagnostics route is public and read-only; it returns this plugin's CSS text only.
 
 ## Development
@@ -167,7 +191,10 @@ npm test
 The smoke test covers the schema defaults and rejections, volatile-ref and plain-value inputs, the
 full placement × height × spacing matrix, row de-duplication, the diagnostics route, a regression
 assertion that `_footerActions` is never reordered (so cost meters and friends stay at the bottom),
-and byte-equality of the two CSS generators across 120 option combinations.
+a guard that the compensation selector names the column exactly once (a duplicated prefix makes it
+silently inert), and byte-equality of the two CSS generators across 120 option combinations. The
+settings card is asserted too: the preview follows the placement, inline mode draws no separate
+account row, and macOS and inline mode each get their hint.
 
 `lib/client.js` is a hand-written bundle in the DSH client-module format
 (`window.__ModuleLoader__.load`); it has no build step.
